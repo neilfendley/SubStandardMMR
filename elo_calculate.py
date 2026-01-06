@@ -11,6 +11,24 @@ class EloConfig:
     k_factor: float = 32.0
     scale: float = 400.0  # Elo scale constant
 
+class DeckStats():
+    name: str
+    rating: float
+    games_played: int
+    games_won: int
+    matches_played: int
+    matches_won: int
+
+    def __init__(self, name: str, rating: float, games_played: int, games_won: int, matches_played: int, matches_won: int):
+        self.name = name
+        self.rating = rating
+        self.games_played = games_played
+        self.games_won = games_won
+        self.matches_played = matches_played
+        self.matches_won = matches_won
+    
+    def __eq__(self, other):
+        return self.name == other.name
 
 def expected_score(r_a: float, r_b: float, scale: float) -> float:
     """Expected score for A vs B under Elo."""
@@ -38,7 +56,7 @@ def compute_elo_from_csv(
     history_out_path: Optional[str] = None,
 ) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
-
+    deck_stats = {}
     required = {player_a_col, player_b_col}
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -65,10 +83,30 @@ def compute_elo_from_csv(
     for i, row in df.iterrows():
         a = str(row[player_a_col]).strip()
         b = str(row[player_b_col]).strip()
+
+        if a not in deck_stats:
+            deck_stats[a] = DeckStats(name=a, rating=config.initial_rating, games_played=0, games_won=0, matches_played=0, matches_won=0)
+        if b not in deck_stats:
+            deck_stats[b] = DeckStats(name=b, rating=config.initial_rating, games_played=0, games_won=0, matches_played=0, matches_won=0)
+
+        deck_stats[a].matches_played += 1
+        deck_stats[b].matches_played += 1
+
+        deck_stats[a].games_played += (row['Games Won Play'] + row['Games Won Draw'])
+        deck_stats[b].games_played += (row['Games Won Play'] + row['Games Won Draw'])
+        deck_stats[a].games_won += row['Games Won Play']
+        deck_stats[b].games_won += row['Games Won Draw']
+
+
         if not a or a.lower() == "nan" or not b or b.lower() == "nan":
             raise ValueError(f"Row {i}: player names missing/invalid: A={a!r}, B={b!r}")
         score_a, score_b = get_scores(row['Games Won Play'], row['Games Won Draw'])
 
+        if score_a > score_b:
+            deck_stats[a].matches_won += 1
+        elif score_b > score_a:
+            deck_stats[b].matches_won += 1
+        
         r_a = get_rating(a)
         r_b = get_rating(b)
 
@@ -98,7 +136,7 @@ def compute_elo_from_csv(
                 **({date_col: row[date_col]} if date_col else {}),
             }
         )
-
+    breakpoint()
     final = (
         pd.DataFrame([{"Deck": p, "mmr": r} for p, r in ratings.items()])
         .sort_values("mmr", ascending=False)
