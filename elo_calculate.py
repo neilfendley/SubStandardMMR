@@ -14,10 +14,10 @@ class EloConfig:
 class DeckStats():
     name: str
     rating: float
-    games_played: int
-    games_won: int
     matches_played: int
     matches_won: int
+    games_played: int
+    games_won: int
 
     def __init__(self, name: str, rating: float, games_played: int, games_won: int, matches_played: int, matches_won: int):
         self.name = name
@@ -46,6 +46,14 @@ def get_scores(games_won_play, games_won_draw) -> Tuple[float, float]:
         return 0.0, 1.0  # Player B wins
     else:
         return 0.5, 0.5  # Draw
+
+def add_deck_stats(deck:  DeckStats) -> None:
+    deck.winrate = float(deck.matches_won) / float(deck.matches_played)
+    deck.winrate = f"{round(deck.winrate * 100)}%"
+
+    deck.game_winrate = float(deck.games_won) / float(deck.games_played) 
+    deck.game_winrate = f"{round(deck.game_winrate * 100)}%"
+    return deck
 
 def compute_elo_from_csv(
     csv_path: str,
@@ -116,6 +124,8 @@ def compute_elo_from_csv(
         new_r_a = r_a + config.k_factor * (score_a - exp_a)
         new_r_b = r_b + config.k_factor * (score_b - exp_b)
 
+        deck_stats[a].rating = round(new_r_a,1)
+        deck_stats[b].rating = round(new_r_b, 1)
         ratings[a] = new_r_a
         ratings[b] = new_r_b
 
@@ -136,12 +146,20 @@ def compute_elo_from_csv(
                 **({date_col: row[date_col]} if date_col else {}),
             }
         )
-    breakpoint()
+    for k,v in deck_stats.items():
+        deck_stats[k] = add_deck_stats(v)
+
     final = (
-        pd.DataFrame([{"Deck": p, "mmr": r} for p, r in ratings.items()])
-        .sort_values("mmr", ascending=False)
+        pd.DataFrame([deck.__dict__ for deck in deck_stats.values()])
+        .sort_values("rating", ascending=False)
         .reset_index(drop=True)
     )
+
+    # final = (
+    #     pd.DataFrame([{"Deck": p, "mmr": r} for p, r in ratings.items()])
+    #     .sort_values("mmr", ascending=False)
+    #     .reset_index(drop=True)
+    # )
     current_time = time.strftime("%Y-%m-%d", time.localtime())
     final.to_csv(f"final_ratings_{current_time}.csv", index=False)
     if history_out_path:
